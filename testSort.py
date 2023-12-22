@@ -1,6 +1,6 @@
 from csvsort import csvsort
 # sort this CSV on the 5th and 3rd columns (columns are 0 indexed)
-csvsort('saved_db_1m.csv', [1], output_filename='saved_db_1m_sorted.csv' , has_header=False)
+csvsort('saved_db_1m.csv', [1], output_filename='saved_db_10_sorted.csv' , has_header=False)
 
 
 # # sort this CSV with no header on 4th column and save results to separate file
