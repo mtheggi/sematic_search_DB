@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 import kdtree
+from kdtree import visualize
 dimensions = 70
 num_vectors = 1000000
 
