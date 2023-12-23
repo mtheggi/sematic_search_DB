@@ -1,12 +1,28 @@
-from csvsort import csvsort
-# sort this CSV on the 5th and 3rd columns (columns are 0 indexed)
-csvsort('saved_db_1m.csv', [1], output_filename='saved_db_10_sorted.csv' , has_header=False)
+import kdtree 
+import csv
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+# Open the CSV file
+points= []
+with open('saved_db_10.csv', 'r') as file:
+    # Create a CSV reader object
+    csv_reader = csv.reader(file)
+    
+    # Initialize an empty list to store the rows
+    
+    # Iterate over each row in the CSV file
+    for row in csv_reader:
+        # Append the row to the list of rows
+        points.append(list(map(float, row[1:])))
 
+def distance(v1, v2 ) :
+    return 1 - cosine_similarity([v1], [v2])[0][0]
+# Create a KDTree
+tree = kdtree.create(points)
+#search for the TOP K nearest neighbor
+print(points[1])
+queryVector = [0.12718718215222624 , 0.963183636660174,0.6555424194210452,0.3133291851458011,0.3528919540205553,0.8668203118164016,0.39626652606370516,0.5728987611344992,0.7074240680371062,0.3864556399520991,0.08491579006631067,0.12291886859445211,0.7707808940776009,0.9327501058342144,0.3066966552889968,0.6419991261669797,0.8588535520215995,0.5824131586724725,0.6131204271127515,0.10286751773999914,0.0549109772028189,0.09352879476593146,0.17104268205957374,0.3824261140256915,0.15356499160275394,0.45347326938263244,0.6083887855272883,0.034960645056148154,0.24393845321453977,0.1278774678517305,0.2871856386640077,0.7512447588345483,0.4859451566973938,0.4199580731997844,0.293269784610794,0.2832464176481909,0.27805718845811844,0.24222588465297312,0.5349363899114752,0.6457376865917788,0.6219711816356497,0.13916395793040215,0.23964331972883335,0.2729502125224802,0.9498684905442188,0.6945602815435133,0.5639426863002537,0.501955681453989,0.3367429117001498,0.9704224868356233,0.007215061636175357,0.030600182627405492,0.09400716702268663,0.25025896502723133,0.14240458339455853,0.009607116915863467,0.2826491522554634,0.7810640954782109,0.9221179015408044,0.21099100150743078,0.18174101107943108,0.8444442653748049,0.2714691854526494,0.26828843222396526,0.4480176844538759,0.036925979004275744,0.05439050847352678,0.0388722829132947,0.08271671126005153,0.44219512781190307]
 
-# # sort this CSV with no header on 4th column and save results to separate file
-# csvsort('test2.csv', [3], output_filename='test3.csv', has_header=False)
-# # sort this TSV on the first column and use a maximum of 10MB per split
-# csvsort('test3.tsv', [0], max_size=10, delimiter='\t')
-# # sort this CSV on the first column and force quotes around every field (default is csv.QUOTE_MINIMAL)
-# import csv
-# csvsort('test4.csv', [0], quoting=csv.QUOTE_ALL)
+print("------------------------------------------------")
+result = tree.search_knn(queryVector, 1 ,dist=distance) 
+print(result)
