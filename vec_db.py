@@ -24,7 +24,8 @@ class VecDB(object):
         if self.new_db == True: #creat a new_database
             self.small_db_size+=len(records)
             with open("small_database.csv", 'w', newline='') as csvfile:
-
+                print("records size = " , len(records) )
+                print(self.small_db_size)
                 writer = csv.writer(csvfile)
                 for item in records:
                     vectorID = item["id"]
@@ -35,6 +36,8 @@ class VecDB(object):
             self.new_db = False
         else:
             self.small_db_size+=len(records)
+            print("records size = " , len(records) )
+            print(self.small_db_size)
             with open("small_database.csv", 'a', newline='') as csvfile:
                 writer = csv.writer(csvfile)
                 for item in records:
@@ -44,14 +47,17 @@ class VecDB(object):
                         print("error: vector size is not 70")
                     writer.writerow([vectorID, *value])
         
-        createExternalPart('small_database.csv', size=self.small_db_size, dimensions=70, axis=0, sel_axis=None, lstCount=splitTest.lstcnt)
-        NodeSerializer.serialize_to_csv(nodes, 'small_database_output.csv')
-        
         splitTest.lstcnt=0 
         splitTest.nodes=[]
-        splitTest.ClusterCnt=0
         splitTest.Internalnodes=[]
-
+        splitTest.ClusterCnt=0
+      
+      
+        createExternalPart('small_database.csv', size=self.small_db_size, dimensions=70, axis=0, sel_axis=None, lstCount=splitTest.lstcnt)
+        NodeSerializer.serialize_to_csv(splitTest.nodes, 'small_database_output.csv')
+        
+        print(lstcnt)
+        print("node array size , " , len(nodes))
         self.file_path = 'small_database_output.csv' # serilized file of output database 
       
         
@@ -72,7 +78,7 @@ class VecDB(object):
             
 
 
-QUERY_SEED_NUMBER = 100
+# QUERY_SEED_NUMBER = 100
 # DB_SEED_NUMBER = 200
 
 # db = VecDB()
@@ -80,8 +86,8 @@ QUERY_SEED_NUMBER = 100
 # rng = np.random.default_rng(DB_SEED_NUMBER)
 # vectors = rng.random((10**4, 70), dtype=np.float32)
 
-rng = np.random.default_rng(QUERY_SEED_NUMBER)
-query = rng.random((1, 70), dtype=np.float32)
+# rng = np.random.default_rng(QUERY_SEED_NUMBER)
+# query = rng.random((1, 70), dtype=np.float32)
 # actual_sorted_ids_10k = np.argsort(vectors.dot(query.T).T / (np.linalg.norm(vectors, axis=1) * np.linalg.norm(query)), axis= 1).squeeze().tolist()[::-1]
 
 # records_dict = [{"id": i, "embed": list(row)} for i, row in enumerate(vectors)]
