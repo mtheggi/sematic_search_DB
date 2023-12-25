@@ -1,3 +1,2 @@
 numpy
 csvsort==1.6.1
-csv
