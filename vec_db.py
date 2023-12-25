@@ -67,9 +67,13 @@ class VecDB(object):
 
     def retrive(self, query , topk)->list : # return list of ids 
         
-        
+        #file_path = test_1m_z/test_1m_d/output.csv
+        parentDir= ""
+        if self.small_db_size == 0 :
+            parentDir = self.file_path[:(len(self.file_path)-10)]
+
         Ids=[]
-        resultTuple= search_knn(self.file_path, query.tolist()[0], topk ,  dist=splitTest.distance) # return (node, distance) 
+        resultTuple= search_knn(self.file_path, query.tolist()[0], topk ,  dist=splitTest.distance , parentDirectory=parentDir) # return (node, distance) 
         for i in resultTuple:
             Ids.append(i[0].id)
         return Ids
@@ -77,22 +81,27 @@ class VecDB(object):
             
             
 
+# path= "test_1m_z/test_1m_d/output.csv"
+
+# print(path[:(len(path)-10)])
+
+
 
 # QUERY_SEED_NUMBER = 100
 # DB_SEED_NUMBER = 200
 
-# db = VecDB()
+# db = VecDB('test_1m_z/test_1m_d/output.csv' , new_db=False)
 
 # rng = np.random.default_rng(DB_SEED_NUMBER)
 # vectors = rng.random((10**4, 70), dtype=np.float32)
 
 # rng = np.random.default_rng(QUERY_SEED_NUMBER)
 # query = rng.random((1, 70), dtype=np.float32)
-# actual_sorted_ids_10k = np.argsort(vectors.dot(query.T).T / (np.linalg.norm(vectors, axis=1) * np.linalg.norm(query)), axis= 1).squeeze().tolist()[::-1]
+# # actual_sorted_ids_10k = np.argsort(vectors.dot(query.T).T / (np.linalg.norm(vectors, axis=1) * np.linalg.norm(query)), axis= 1).squeeze().tolist()[::-1]
 
-# records_dict = [{"id": i, "embed": list(row)} for i, row in enumerate(vectors)]
-# db.insert_records(records_dict)
-# ids = db.retrive(query, 10)
+# # records_dict = [{"id": i, "embed": list(row)} for i, row in enumerate(vectors)]
+# # db.insert_records(records_dict)
+# ids = db.retrive(query, 100)
 # print(ids)
 
 

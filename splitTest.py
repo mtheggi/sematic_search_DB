@@ -124,7 +124,7 @@ def ConvertFileToList(FileName):
 
 ClusterCnt =0 
 nodes=[] 
-def createExternalPart(fileName=None, size=0,dimensions=None, axis=0, sel_axis=None,lstCount=0,clusterSize=1000):
+def createExternalPart(fileName=None, size=0,dimensions=None, axis=0, sel_axis=None,lstCount=0,clusterSize=10000):
     """ Creates a kd-tree from a list of points
 
     All points in the list must be of the same dimensionality.
@@ -266,7 +266,7 @@ lstcnt =0
 def distance(v1, v2 ) :
         return 1 - cosine_similarity([v1], [v2])[0][0]
 
-def search_knn_cluster(CurrentNode , point, k, results, get_dist, counter, nodes_Dic):
+def search_knn_cluster(CurrentNode , point, k, results, get_dist, counter, nodes_Dic,parentDirectory):
     if not CurrentNode:
         return
 
@@ -293,26 +293,27 @@ def search_knn_cluster(CurrentNode , point, k, results, get_dist, counter, nodes
     if point[CurrentNode.axis] < split_plane:
         if CurrentNode.left is not None and CurrentNode.left != -1:
             Nextnode1= nodes_Dic[CurrentNode.left]
-            search_knn_cluster(Nextnode1,point, k, results, get_dist, counter,nodes_Dic)
+            search_knn_cluster(Nextnode1,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
     else:
         if CurrentNode.right is not None and CurrentNode.right != -1:
             Nextnode2= nodes_Dic[CurrentNode.right]
-            search_node(Nextnode2, point, k, results, get_dist, counter, nodes_Dic)
+            search_node(Nextnode2, point, k, results, get_dist, counter, nodes_Dic,parentDirectory)
     # Search the other side of the splitting plane if it may contain
     # points closer than the farthest point in the current results.
     if -plane_dist2 > results[0][0] or len(results) < k:
         if point[CurrentNode.axis] < CurrentNode.data[CurrentNode.axis]:
             if CurrentNode.right is not None and CurrentNode.right != -1:
                 Nextnode2= nodes_Dic[CurrentNode.right]
-                search_node(Nextnode2, point, k, results, get_dist, counter, nodes_Dic)
+                search_node(Nextnode2, point, k, results, get_dist, counter, nodes_Dic,parentDirectory)
         else:
             if CurrentNode.left is not None and CurrentNode.left != -1:
                 Nextnode1= nodes_Dic[CurrentNode.left]
-                search_knn_cluster(Nextnode1,point, k, results, get_dist, counter,nodes_Dic)
+                search_knn_cluster(Nextnode1,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
 
 
-
-def search_knn(DirectoryName, point, k, dist=None):
+    # "test1_z/test1/output.csv"
+    #/centent/test1_Z
+def search_knn(DirectoryName, point, k, dist=None,parentDirectory=""):
     """ Return the k nearest neighbors of point and their distances
     point must be an actual point, not a node.
     k is the number of results to return. The actual results can be less
@@ -335,14 +336,14 @@ def search_knn(DirectoryName, point, k, dist=None):
     else:
         get_dist = lambda n: dist(n.data, point)
     results = []
-    search_node(Rootnode,point, k, results, get_dist, itertools.count(), nodes_Dic)
+    search_node(Rootnode,point, k, results, get_dist, itertools.count(), nodes_Dic,parentDirectory)
     # We sort the final result by the distance in the tuple
     # (<KdNode>, distance).
     return [(node, -d) for d, _, node in sorted(results, reverse=True)]
 
 
 
-def search_node( CurrentNode , point, k, results, get_dist, counter, nodes_Dic):
+def search_node( CurrentNode , point, k, results, get_dist, counter, nodes_Dic,parentDirectory):
     if not CurrentNode:
         return
     nodeDist = get_dist(CurrentNode)
@@ -369,27 +370,27 @@ def search_node( CurrentNode , point, k, results, get_dist, counter, nodes_Dic):
         if CurrentNode.left is not None and CurrentNode.left != -1:
             if isinstance(CurrentNode.left,int) : 
                 nextNode = nodes_Dic[CurrentNode.left]
-                search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic)
+                search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
             else: # clustered Node 
-                clusterFileName = CurrentNode.left
+                clusterFileName = parentDirectory + CurrentNode.left                
                 ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
                 clusterNodeRoot= ClusterNodes[-1]
             
                 ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
                 # print("cluster Node left ") 
                 # print(ClusterNode_Dic)
-                search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic)            
+                search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)            
     else:
         if CurrentNode.right is not None and CurrentNode.right != -1:
             if isinstance(CurrentNode.right,int) : 
                 nextNode = nodes_Dic[CurrentNode.right]
-                search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic)
+                search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
             else: # clustered Node 
-                clusterFileName = CurrentNode.right
+                clusterFileName = parentDirectory+ CurrentNode.right
                 ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
                 clusterNodeRoot= ClusterNodes[-1]
                 ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
-                search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic)
+                search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)
     # Search the other side of the splitting plane if it may contain
     # points closer than the farthest point in the current results.
     if -plane_dist2 > results[0][0] or len(results) < k:
@@ -397,25 +398,25 @@ def search_node( CurrentNode , point, k, results, get_dist, counter, nodes_Dic):
             if CurrentNode.right is not None and CurrentNode.right != -1:
                 if isinstance(CurrentNode.right,int) : 
                     nextNode = nodes_Dic[CurrentNode.right]
-                    search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic)
+                    search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
                 else: # clustered Node 
-                    clusterFileName = CurrentNode.right
+                    clusterFileName = parentDirectory + CurrentNode.right
                     ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
                     clusterNodeRoot= ClusterNodes[-1]
                 
                     ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
-                    search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic)
+                    search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)
         else:
             if CurrentNode.left is not None and CurrentNode.left != -1:
                 if isinstance(CurrentNode.left,int) : 
                     nextNode = nodes_Dic[CurrentNode.left]
-                    search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic)
+                    search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
                 else: # clustered Node 
-                    clusterFileName = CurrentNode.left
+                    clusterFileName = parentDirectory + CurrentNode.left
                     ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
                     clusterNodeRoot= ClusterNodes[-1]
                     ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
-                    search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic)        
+                    search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)        
 
 
 
