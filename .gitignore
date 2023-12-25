@@ -9,3 +9,5 @@ saved_db_20m_sorted.csv
 *.ipynb
 test_1m_z/*
 __pycache__/*
+submission.zip
+submission/*
