@@ -1,579 +1,163 @@
-# -*- coding: utf-8 -*-
-
-
-"""A Python implemntation of a kd-tree
-
-This package provides a simple implementation of a kd-tree in Python.
-https://en.wikipedia.org/wiki/K-d_tree
-"""
-
-from __future__ import print_function
-
+import csv
+from csvsort import csvsort
 import heapq
 import itertools
-import operator
-import math
-from collections import deque
-from functools import wraps
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
 
-__author__ = u'Stefan Kögl <stefan@skoegl.net>'
-__version__ = '0.16'
-__website__ = 'https://github.com/stefankoegl/kdtree'
-__license__ = 'ISC license'
+
+def split_csv(input_file, output_file1, output_file2, middle_row):
+    """
+    Split a CSV file into two separate files based on a middle row( median ).
+
+    Parameters:
+    input_file (str): The path to the input CSV file.
+    output_file1 (str): The path to the first output CSV file.
+    output_file2 (str): The path to the second output CSV file.
+    middle_row (int): The index of the middle row. This row will be excluded from the output files.
+
+    Returns:
+    list: The middle row as a list.
+
+    """
+    with open(input_file, 'r', newline='') as infile, \
+        open(output_file1, 'w', newline='') as outfile1, \
+        open(output_file2, 'w', newline='') as outfile2:
+
+        reader = csv.reader(infile)
+        
+        writer1 = csv.writer(outfile1)
+        writer2 = csv.writer(outfile2)
+        if middle_row==0: 
+            for row in reader:
+                return row 
+            
+        rowCount = 0
+        returnRow=None
+        for row in reader:
+            if rowCount == middle_row:
+                returnRow=row
+            elif rowCount < middle_row:
+                writer1.writerow(row)
+            else:
+                writer2.writerow(row)
+            rowCount += 1
+    return returnRow
+
 
 
 class Node(object):
-    """ A Node in a kd-tree
-
-    A tree is represented by its root node, and every node represents
-    its subtree"""
-
-    def __init__(self, data=None, left=None, right=None):
+    def __init__(self,id, data:list,left,right,axis,dimensions):
         self.data = data
         self.left = left
         self.right = right
-
-
-    @property
-    def is_leaf(self):
-        """ Returns True if a Node has no subnodes
-
-        >>> Node().is_leaf
-        True
-
-        >>> Node( 1, left=Node(2) ).is_leaf
-        False
-        """
-        return (not self.data) or \
-               (all(not bool(c) for c, p in self.children))
-
-
-    def preorder(self):
-        """ iterator for nodes: root, left, right """
-
-        if not self:
-            return
-
-        yield self
-
-        if self.left:
-            for x in self.left.preorder():
-                yield x
-
-        if self.right:
-            for x in self.right.preorder():
-                yield x
-
-
-    def inorder(self):
-        """ iterator for nodes: left, root, right """
-
-        if not self:
-            return
-
-        if self.left:
-            for x in self.left.inorder():
-                yield x
-
-        yield self
-
-        if self.right:
-            for x in self.right.inorder():
-                yield x
-
-
-    def postorder(self):
-        """ iterator for nodes: left, right, root """
-
-        if not self:
-            return
-
-        if self.left:
-            for x in self.left.postorder():
-                yield x
-
-        if self.right:
-            for x in self.right.postorder():
-                yield x
-
-        yield self
-
-
-    @property
-    def children(self):
-        """
-        Returns an iterator for the non-empty children of the Node
-
-        The children are returned as (Node, pos) tuples where pos is 0 for the
-        left subnode and 1 for the right.
-
-        >>> len(list(create(dimensions=2).children))
-        0
-
-        >>> len(list(create([ (1, 2) ]).children))
-        0
-
-        >>> len(list(create([ (2, 2), (2, 1), (2, 3) ]).children))
-        2
-        """
-
-        if self.left and self.left.data is not None:
-            yield self.left, 0
-        if self.right and self.right.data is not None:
-            yield self.right, 1
-
-
-    def set_child(self, index, child):
-        """ Sets one of the node's children
-
-        index 0 refers to the left, 1 to the right child """
-
-        if index == 0:
-            self.left = child
-        else:
-            self.right = child
-
-
-    def height(self):
-        """
-        Returns height of the (sub)tree, without considering
-        empty leaf-nodes
-
-        >>> create(dimensions=2).height()
-        0
-
-        >>> create([ (1, 2) ]).height()
-        1
-
-        >>> create([ (1, 2), (2, 3) ]).height()
-        2
-        """
-
-        min_height = int(bool(self))
-        return max([min_height] + [c.height()+1 for c, p in self.children])
-
-
-    def get_child_pos(self, child):
-        """ Returns the position if the given child
-
-        If the given node is the left child, 0 is returned. If its the right
-        child, 1 is returned. Otherwise None """
-
-        for c, pos in self.children:
-            if child == c:
-                return pos
-
-
-    def __repr__(self):
-        return '<%(cls)s - %(data)s>' % \
-            dict(cls=self.__class__.__name__, data=repr(self.data))
-
-
-    def __nonzero__(self):
-        return self.data is not None
-
-    __bool__ = __nonzero__
-
-    def __eq__(self, other):
-        if isinstance(other, tuple):
-            return self.data == other
-        else:
-            return self.data == other.data
-
-    def __hash__(self):
-        return id(self)
-
-
-def require_axis(f):
-    """ Check if the object of the function has axis and sel_axis members """
-
-    @wraps(f)
-    def _wrapper(self, *args, **kwargs):
-        if None in (self.axis, self.sel_axis):
-            raise ValueError('%(func_name) requires the node %(node)s '
-                    'to have an axis and a sel_axis function' %
-                    dict(func_name=f.__name__, node=repr(self)))
-
-        return f(self, *args, **kwargs)
-
-    return _wrapper
-
-
-
-class KDNode(Node):
-    """ A Node that contains kd-tree specific data and methods """
-
-
-    def __init__(self, data=None, left=None, right=None, axis=None,
-            sel_axis=None, dimensions=None):
-        """ Creates a new node for a kd-tree
-
-        If the node will be used within a tree, the axis and the sel_axis
-        function should be supplied.
-
-        sel_axis(axis) is used when creating subnodes of the current node. It
-        receives the axis of the parent node and returns the axis of the child
-        node. """
-        super(KDNode, self).__init__(data, left, right)
         self.axis = axis
-        self.sel_axis = sel_axis
         self.dimensions = dimensions
+        self.id = id
 
-
-    @require_axis
-    def add(self, point):
+class NodeSerializer:
+    @staticmethod
+    def serialize_to_csv(nodes, csv_filename):
         """
-        Adds a point to the current node or iteratively
-        descends to one of its children.
+        Serialize a list of nodes to a CSV file.
+        to be able to save the tree in a file for a future search 
+        Args:
+            nodes (list): List of nodes to be serialized.
+            csv_filename (str): Name of the CSV file to be created.
 
-        Users should call add() only to the topmost tree.
+        Returns:
+            None
         """
-
-        current = self
-        while True:
-            check_dimensionality([point], dimensions=current.dimensions)
-
-            # Adding has hit an empty leaf-node, add here
-            if current.data is None:
-                current.data = point
-                return current
-
-            # split on self.axis, recurse either left or right
-            if point[current.axis] < current.data[current.axis]:
-                if current.left is None:
-                    current.left = current.create_subnode(point)
-                    return current.left
-                else:
-                    current = current.left
-            else:
-                if current.right is None:
-                    current.right = current.create_subnode(point)
-                    return current.right
-                else:
-                    current = current.right
+        with open(csv_filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            for node in nodes:
+                # Write a row for each node's attributes
+                writer.writerow([node.id, *node.data, node.left, node.right, node.axis, node.dimensions])
 
 
-    @require_axis
-    def create_subnode(self, data):
-        """ Creates a subnode for the current node """
+def ConvertNodestoDict(nodes): 
+    """
+    Converts a list of nodes into a dictionary.
+    to be able to search on a give node by id quickly during knn search 
+    Args:
+        nodes (list): A list of nodes.
 
-        return self.__class__(data,
-                axis=self.sel_axis(self.axis),
-                sel_axis=self.sel_axis,
-                dimensions=self.dimensions)
+    Returns:
+        dict: A dictionary where the keys are the node IDs and the values are the nodes themselves.
+    """
+    nodesDict = {}
+    for node in nodes:
+        nodesDict[node.id] = node
 
+    return nodesDict
 
-    @require_axis
-    def find_replacement(self):
-        """ Finds a replacement for the current node
-
-        The replacement is returned as a
-        (replacement-node, replacements-parent-node) tuple """
-
-        if self.right:
-            child, parent = self.right.extreme_child(min, self.axis)
-        else:
-            child, parent = self.left.extreme_child(max, self.axis)
-
-        return (child, parent if parent is not None else self)
-
-
-    def should_remove(self, point, node):
-        """ checks if self's point (and maybe identity) matches """
-        if not self.data == point:
-            return False
-
-        return (node is None) or (node is self)
-
-
-    @require_axis
-    def remove(self, point, node=None):
-        """ Removes the node with the given point from the tree
-
-        Returns the new root node of the (sub)tree.
-
-        If there are multiple points matching "point", only one is removed. The
-        optional "node" parameter is used for checking the identity, once the
-        removeal candidate is decided."""
-
-        # Recursion has reached an empty leaf node, nothing here to delete
-        if not self:
-            return
-
-        # Recursion has reached the node to be deleted
-        if self.should_remove(point, node):
-            return self._remove(point)
-
-        # Remove direct subnode
-        if self.left and self.left.should_remove(point, node):
-            self.left = self.left._remove(point)
-
-        elif self.right and self.right.should_remove(point, node):
-            self.right = self.right._remove(point)
-
-        # Recurse to subtrees
-        if point[self.axis] <= self.data[self.axis]:
-            if self.left:
-                self.left = self.left.remove(point, node)
-
-        if point[self.axis] >= self.data[self.axis]:
-            if self.right:
-                self.right = self.right.remove(point, node)
-
-        return self
-
-
-    @require_axis
-    def _remove(self, point):
-        # we have reached the node to be deleted here
-
-        # deleting a leaf node is trivial
-        if self.is_leaf:
-            self.data = None
-            return self
-
-        # we have to delete a non-leaf node here
-
-        # find a replacement for the node (will be the new subtree-root)
-        root, max_p = self.find_replacement()
-
-        # self and root swap positions
-        tmp_l, tmp_r = self.left, self.right
-        self.left, self.right = root.left, root.right
-        root.left, root.right = tmp_l if tmp_l is not root else self, tmp_r if tmp_r is not root else self
-        self.axis, root.axis = root.axis, self.axis
-
-        # Special-case if we have not chosen a direct child as the replacement
-        if max_p is not self:
-            pos = max_p.get_child_pos(root)
-            max_p.set_child(pos, self)
-            max_p.remove(point, self)
-
-        else:
-            root.remove(point, self)
-
-        return root
-
-
-    @property
-    def is_balanced(self):
-        """ Returns True if the (sub)tree is balanced
-
-        The tree is balanced if the heights of both subtrees differ at most by
-        1 """
-
-        left_height = self.left.height() if self.left else 0
-        right_height = self.right.height() if self.right else 0
-
-        if abs(left_height - right_height) > 1:
-            return False
-
-        return all(c.is_balanced for c, _ in self.children)
-
-
-    def rebalance(self):
+class NodeDeserializer:
+    @staticmethod
+    def deserialize_from_csv(csv_filename):
         """
-        Returns the (possibly new) root of the rebalanced tree
+        Deserialize data from a CSV file and create a list of Node objects.
+
+        Args:
+            csv_filename (str): The path to the CSV file.
+
+        Returns:
+            list: A list of Node objects.
+
         """
+        nodes = []
 
-        return create([x.data for x in self.inorder()])
+        with open(csv_filename, 'r', newline='') as csvfile:
+            reader = csv.reader(csvfile)
 
+            for row in reader:
+                # Extract values from the CSV row
+                node_id = int(row[0])
+                data = list(map(float, row[1:71]))  # Assuming the next 70 cells are for data
+                if row[71] == '':
+                    left = None
+                else: 
+                    if row[71][-1] =='v':
+                        left = row[71]
+                    else:
+                        left = int(row[71])
+                if row[72] == '':
+                    right = None
+                else:   
+                    if row[72][-1] =='v':
+                        right = row[72]
+                    else:
+                        right = int(row[72])
+                axis = int(row[73]) if row[73] else None
+                dimensions = int(row[74]) if row[74] else None
+                nodes.append(Node(node_id,data, left, right, axis, dimensions))
 
-    def axis_dist(self, point, axis):
-        """
-        Squared distance at the given axis between
-        the current Node and the given point
-        """
-        return math.pow(self.data[axis] - point[axis], 2)
-
-
-    def dist(self, point):
-        """
-        Squared distance between the current Node
-        and the given point
-        """
-        r = range(self.dimensions)
-        return sum([self.axis_dist(point, i) for i in r])
-
-
-    def search_knn(self, point, k, dist=None):
-        """ Return the k nearest neighbors of point and their distances
-
-        point must be an actual point, not a node.
-
-        k is the number of results to return. The actual results can be less
-        (if there aren't more nodes to return) or more in case of equal
-        distances.
-
-        dist is a distance function, expecting two points and returning a
-        distance value. Distance values can be any comparable type.
-
-        The result is an ordered list of (node, distance) tuples.
-        """
-
-        if k < 1:
-            raise ValueError("k must be greater than 0.")
-
-        if dist is None:
-            get_dist = lambda n: n.dist(point)
-        else:
-            get_dist = lambda n: dist(n.data, point)
-
-        results = []
-
-        self._search_node(point, k, results, get_dist, itertools.count())
-
-        # We sort the final result by the distance in the tuple
-        # (<KdNode>, distance).
-        return [(node, -d) for d, _, node in sorted(results, reverse=True)]
+        return nodes
 
 
-    def _search_node(self, point, k, results, get_dist, counter):
-        if not self:
-            return
+def ConvertFileToList(FileName):
+    """
+    Converts the contents of a file into a list of rows.
 
-        nodeDist = get_dist(self)
+    Args:
+        FileName (str): The name of the file to be converted.
 
-        # Add current node to the priority queue if it closer than
-        # at least one point in the queue.
-        #
-        # If the heap is at its capacity, we need to check if the
-        # current node is closer than the current farthest node, and if
-        # so, replace it.
-        item = (-nodeDist, next(counter), self)
-        if len(results) >= k:
-            if -nodeDist > results[0][0]:
-                heapq.heapreplace(results, item)
-        else:
-            heapq.heappush(results, item)
-        # get the splitting plane
-        split_plane = self.data[self.axis]
-        # get the squared distance between the point and the splitting plane
-        # (squared since all distances are squared).
-        plane_dist = point[self.axis] - split_plane
-        plane_dist2 = plane_dist * plane_dist
+    Returns:
+        list: A list containing the rows of the file.
+    """
+    data_list = []
 
-        # Search the side of the splitting plane that the point is in
-        if point[self.axis] < split_plane:
-            if self.left is not None:
-                self.left._search_node(point, k, results, get_dist, counter)
-        else:
-            if self.right is not None:
-                self.right._search_node(point, k, results, get_dist, counter)
+    with open(FileName, 'r', newline='') as csvfile:
+        reader = csv.reader(csvfile)
+        
+        for row in reader:
+            data_list.append(row)
 
-        # Search the other side of the splitting plane if it may contain
-        # points closer than the farthest point in the current results.
-        if -plane_dist2 > results[0][0] or len(results) < k:
-            if point[self.axis] < self.data[self.axis]:
-                if self.right is not None:
-                    self.right._search_node(point, k, results, get_dist,
-                                            counter)
-            else:
-                if self.left is not None:
-                    self.left._search_node(point, k, results, get_dist,
-                                           counter)
+    return data_list
 
 
-    @require_axis
-    def search_nn(self, point, dist=None):
-        """
-        Search the nearest node of the given point
-
-        point must be an actual point, not a node. The nearest node to the
-        point is returned. If a location of an actual node is used, the Node
-        with this location will be returned (not its neighbor).
-
-        dist is a distance function, expecting two points and returning a
-        distance value. Distance values can be any comparable type.
-
-        The result is a (node, distance) tuple.
-        """
-
-        return next(iter(self.search_knn(point, 1, dist)), None)
-
-
-    def _search_nn_dist(self, point, dist, results, get_dist):
-        if not self:
-            return
-
-        nodeDist = get_dist(self)
-
-        if nodeDist < dist:
-            results.append(self.data)
-
-        # get the splitting plane
-        split_plane = self.data[self.axis]
-
-        # Search the side of the splitting plane that the point is in
-        if point[self.axis] <= split_plane + dist:
-            if self.left is not None:
-                self.left._search_nn_dist(point, dist, results, get_dist)
-        if point[self.axis] >= split_plane - dist:
-            if self.right is not None:
-                self.right._search_nn_dist(point, dist, results, get_dist)
-
-
-    @require_axis
-    def search_nn_dist(self, point, distance, best=None):
-        """
-        Search the n nearest nodes of the given point which are within given
-        distance
-
-        point must be a location, not a node. A list containing the n nearest
-        nodes to the point within the distance will be returned.
-        """
-
-        results = []
-        get_dist = lambda n: n.dist(point)
-
-        self._search_nn_dist(point, distance, results, get_dist)
-        return results
-
-
-    @require_axis
-    def is_valid(self):
-        """ Checks recursively if the tree is valid
-
-        It is valid if each node splits correctly """
-
-        if not self:
-            return True
-
-        if self.left and self.data[self.axis] < self.left.data[self.axis]:
-            return False
-
-        if self.right and self.data[self.axis] > self.right.data[self.axis]:
-            return False
-
-        return all(c.is_valid() for c, _ in self.children) or self.is_leaf
-
-
-    def extreme_child(self, sel_func, axis):
-        """ Returns a child of the subtree and its parent
-
-        The child is selected by sel_func which is either min or max
-        (or a different function with similar semantics). """
-
-        max_key = lambda child_parent: child_parent[0].data[axis]
-
-
-        # we don't know our parent, so we include None
-        me = [(self, None)] if self else []
-
-        child_max = [c.extreme_child(sel_func, axis) for c, _ in self.children]
-        # insert self for unknown parents
-        child_max = [(c, p if p is not None else self) for c, p in child_max]
-
-        candidates =  me + child_max
-
-        if not candidates:
-            return None, None
-
-        return sel_func(candidates, key=max_key)
-
-
-
-def create(point_list=None, dimensions=None, axis=0, sel_axis=None):
+ClusterCnt =0 
+nodes=[] 
+def createExternalPart(fileName=None, size=0,dimensions=None, axis=0, sel_axis=None,lstCount=0,clusterSize=10000):
     """ Creates a kd-tree from a list of points
 
     All points in the list must be of the same dimensionality.
@@ -588,90 +172,306 @@ def create(point_list=None, dimensions=None, axis=0, sel_axis=None):
     sel_axis(axis) is used when creating subnodes of a node. It receives the
     axis of the parent node and returns the axis of the child node. """
 
-    if not point_list and not dimensions:
-        raise ValueError('either point_list or dimensions must be provided')
+    # by default cycle through the axis
+    global ClusterCnt
+    global Internalnodes
+    global nodes
+    if size ==0 : 
+        return None
+    
+    sel_axis = sel_axis or (lambda prev_axis: (prev_axis+1) % dimensions)
 
-    elif point_list:
-        dimensions = check_dimensionality(point_list, dimensions)
+    # Sort point list and choose median as pivot element
+    median = size // 2
+    # print(f"Sorting {fileName} on axis {axis+1}")
+    # print(f"size  is  {size}")
+    
+    csvsort(fileName, [axis+1], output_filename='saved_db.csv' , has_header=False)
+    fileName1 = 'output'+str(lstCount+1)+'.csv'
+    fileName2 = 'output'+str(lstCount+2)+'.csv'
+    middle = split_csv('saved_db.csv', fileName1, fileName2, median)
+    
+    # print(middle) 
+
+    nodeId=middle[0]
+    nodeData=middle[1:]
+    
+    if median == 0:
+        newNode =  Node(nodeId,nodeData,None,None,axis,dimensions)
+        nodes.append(newNode)
+        return newNode
+    
+    leftsize = size//2
+    rightsize = size//2 - (size%2==0)
+
+    if leftsize <= clusterSize and leftsize > 0:
+        point_list = ConvertFileToList(fileName1)
+        left = createInternalPart(point_list=point_list, dimensions=dimensions, axis=sel_axis(axis), sel_axis=None)
+        ClusterFileName ='Cluster'+str(ClusterCnt)+'.csv'
+        ClusterCnt= ClusterCnt+1 
+        NodeSerializer.serialize_to_csv(Internalnodes, ClusterFileName)
+        point_list= []
+        Internalnodes=[]
+        leftId = ClusterFileName
+
+    else: 
+        left  = createExternalPart(fileName= fileName1, size=leftsize ,dimensions= dimensions, axis=sel_axis(axis),lstCount=lstCount+2)
+        if left != None:
+            leftId=left.id
+        else : 
+            leftId= -1
+
+    if rightsize <= clusterSize and rightsize > 0:
+        point_list = ConvertFileToList(fileName2)
+        right = createInternalPart(point_list=point_list, dimensions=dimensions, axis=sel_axis(axis), sel_axis=None)
+        ClusterFileName ='Cluster'+str(ClusterCnt)+'.csv'
+        ClusterCnt= ClusterCnt+1 
+        NodeSerializer.serialize_to_csv(Internalnodes, ClusterFileName)
+        point_list= []
+        Internalnodes=[]
+        rightId = ClusterFileName
+        
+    else:        
+        right = createExternalPart(fileName= fileName2, size=rightsize,dimensions=dimensions, axis=sel_axis(axis),lstCount=lstCount+2)        
+        if right !=None: 
+            rightId=right.id
+        else:
+            rightId= -1
+
+    newNode = Node(nodeId,nodeData, leftId, rightId, axis=axis,  dimensions=dimensions)
+    nodes.append(newNode)
+    return newNode
+
+
+
+Internalnodes=[] 
+
+def createInternalPart(point_list=None, dimensions=None, axis=0, sel_axis=None):
+    """ Creates a kd-tree from a list of points
+
+    All points in the list must be of the same dimensionality.
+
+    If no point_list is given, an empty tree is created. The number of
+    dimensions has to be given instead.
+
+    If both a point_list and dimensions are given, the numbers must agree.
+
+    Axis is the axis on which the root-node should split.
+
+    sel_axis(axis) is used when creating subnodes of a node. It receives the
+    axis of the parent node and returns the axis of the child node. """
 
     # by default cycle through the axis
     sel_axis = sel_axis or (lambda prev_axis: (prev_axis+1) % dimensions)
 
     if not point_list:
-        return KDNode(sel_axis=sel_axis, axis=axis, dimensions=dimensions)
-
+        return None 
+    
     # Sort point list and choose median as pivot element
     point_list = list(point_list)
-    point_list.sort(key=lambda point: point[axis])
+    
+    point_list.sort(key=lambda point: point[axis+1])
     median = len(point_list) // 2
 
     loc   = point_list[median]
-    left  = create(point_list[:median], dimensions, sel_axis(axis))
-    right = create(point_list[median + 1:], dimensions, sel_axis(axis))
-    return KDNode(loc, left, right, axis=axis, sel_axis=sel_axis, dimensions=dimensions)
+    left  = createInternalPart(point_list[:median], dimensions, sel_axis(axis))
+    right = createInternalPart(point_list[median + 1:], dimensions, sel_axis(axis))
+    if left != None:
+        leftId=left.id
+    else : 
+        leftId= -1
+    
+    if right !=None: 
+        rightId=right.id
+    else:
+        rightId= -1
+
+    newNode = Node(loc[0], loc[1:],leftId,rightId, axis=axis, dimensions=dimensions)
+    
+    Internalnodes.append(newNode)
+
+    return newNode
+
+lstcnt =0 
+
+def distance(v1, v2 ) :
+        #using cosine_similarity 
+        #distance function that will be passed to get the distance between two vectors 
+        return 1 - cosine_similarity([v1], [v2])[0][0]
+
+def search_knn_cluster(CurrentNode , point, k, results, get_dist, counter, nodes_Dic,parentDirectory):
+    if not CurrentNode:
+        return
+
+    nodeDist = get_dist(CurrentNode)
+    # Add current node to the priority queue if it closer than
+    # at least one point in the queue.
+    #
+    # If the heap is at its capacity, we need to check if the
+    # current node is closer than the current farthest node, and if
+    # so, replace it.
+    item = (-nodeDist, next(counter), CurrentNode)
+    if len(results) >= k:
+        if -nodeDist > results[0][0]:
+            heapq.heapreplace(results, item)
+    else:
+        heapq.heappush(results, item)
+    # get the splitting plane
+    split_plane = CurrentNode.data[CurrentNode.axis]
+    # get the squared distance between the point and the splitting plane
+    # (squared since all distances are squared).
+    plane_dist = point[CurrentNode.axis] - split_plane
+    plane_dist2 = plane_dist * plane_dist
+    # Search the side of the splitting plane that the point is in
+    if point[CurrentNode.axis] < split_plane:
+        if CurrentNode.left is not None and CurrentNode.left != -1:
+            Nextnode1= nodes_Dic[CurrentNode.left]
+            search_knn_cluster(Nextnode1,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
+    else:
+        if CurrentNode.right is not None and CurrentNode.right != -1:
+            Nextnode2= nodes_Dic[CurrentNode.right]
+            search_node(Nextnode2, point, k, results, get_dist, counter, nodes_Dic,parentDirectory)
+    # Search the other side of the splitting plane if it may contain
+    # points closer than the farthest point in the current results.
+    if -plane_dist2 > results[0][0] or len(results) < k:
+        if point[CurrentNode.axis] < CurrentNode.data[CurrentNode.axis]:
+            if CurrentNode.right is not None and CurrentNode.right != -1:
+                Nextnode2= nodes_Dic[CurrentNode.right]
+                search_node(Nextnode2, point, k, results, get_dist, counter, nodes_Dic,parentDirectory)
+        else:
+            if CurrentNode.left is not None and CurrentNode.left != -1:
+                Nextnode1= nodes_Dic[CurrentNode.left]
+                search_knn_cluster(Nextnode1,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
 
 
-def check_dimensionality(point_list, dimensions=None):
-    dimensions = dimensions or len(point_list[0])
-    for p in point_list:
-        if len(p) != dimensions:
-            raise ValueError('All Points in the point_list must have the same dimensionality')
+    # "test1_z/test1/output.csv"
+    #/centent/test1_Z
+def search_knn(DirectoryName, point, k, dist=None,parentDirectory=""):
+    """ Return the k nearest neighbors of point and their distances
+    point must be an actual point, not a node.
+    k is the number of results to return. The actual results can be less
+    (if there aren't more nodes to return) or more in case of equal
+    distances.
+    dist is a distance function, expecting two points and returning a
+    distance value. Distance values can be any comparable type.
+    The result is an ordered list of (node, distance) tuples.
+    """
+    nodes=NodeDeserializer.deserialize_from_csv(DirectoryName)
+    Rootnode= nodes[-1]    
+    nodes_Dic = ConvertNodestoDict(nodes)
+    # print(nodes_Dic)
+    
 
-    return dimensions
+    if k < 1:
+        raise ValueError("k must be greater than 0.")
+    if dist is None:
+        get_dist = lambda n: n.dist(point)
+    else:
+        get_dist = lambda n: dist(n.data, point)
+    results = []
+    search_node(Rootnode,point, k, results, get_dist, itertools.count(), nodes_Dic,parentDirectory)
+    # We sort the final result by the distance in the tuple
+    # (<KdNode>, distance).
+    return [(node, -d) for d, _, node in sorted(results, reverse=True)]
 
 
 
-def level_order(tree, include_all=False):
-    """ Returns an iterator over the tree in level-order
+def search_node( CurrentNode , point, k, results, get_dist, counter, nodes_Dic,parentDirectory):
+    if not CurrentNode:
+        return
+    nodeDist = get_dist(CurrentNode)
+    # Add current node to the priority queue if it closer than
+    # at least one point in the queue.
+    #
+    # If the heap is at its capacity, we need to check if the
+    # current node is closer than the current farthest node, and if
+    # so, replace it.
+    item = (-nodeDist, next(counter), CurrentNode)
+    if len(results) >= k:
+        if -nodeDist > results[0][0]:
+            heapq.heapreplace(results, item)
+    else:
+        heapq.heappush(results, item)
+    # get the splitting plane
+    split_plane = CurrentNode.data[CurrentNode.axis]
+    # get the squared distance between the point and the splitting plane
+    # (squared since all distances are squared).
+    plane_dist = point[CurrentNode.axis] - split_plane
+    plane_dist2 = plane_dist * plane_dist
+    # Search the side of the splitting plane that the point is in
+    if point[CurrentNode.axis] < split_plane:
+        if CurrentNode.left is not None and CurrentNode.left != -1:
+            if isinstance(CurrentNode.left,int) : 
+                nextNode = nodes_Dic[CurrentNode.left]
+                search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
+            else: # clustered Node 
+                clusterFileName = parentDirectory + CurrentNode.left                
+                ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
+                clusterNodeRoot= ClusterNodes[-1]
+            
+                ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
+                # print("cluster Node left ") 
+                # print(ClusterNode_Dic)
+                search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)            
+    else:
+        if CurrentNode.right is not None and CurrentNode.right != -1:
+            if isinstance(CurrentNode.right,int) : 
+                nextNode = nodes_Dic[CurrentNode.right]
+                search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
+            else: # clustered Node 
+                clusterFileName = parentDirectory+ CurrentNode.right
+                ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
+                clusterNodeRoot= ClusterNodes[-1]
+                ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
+                search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)
+    # Search the other side of the splitting plane if it may contain
+    # points closer than the farthest point in the current results.
+    if -plane_dist2 > results[0][0] or len(results) < k:
+        if point[CurrentNode.axis] < CurrentNode.data[CurrentNode.axis]:
+            if CurrentNode.right is not None and CurrentNode.right != -1:
+                if isinstance(CurrentNode.right,int) : 
+                    nextNode = nodes_Dic[CurrentNode.right]
+                    search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
+                else: # clustered Node 
+                    clusterFileName = parentDirectory + CurrentNode.right
+                    ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
+                    clusterNodeRoot= ClusterNodes[-1]
+                
+                    ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
+                    search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)
+        else:
+            if CurrentNode.left is not None and CurrentNode.left != -1:
+                if isinstance(CurrentNode.left,int) : 
+                    nextNode = nodes_Dic[CurrentNode.left]
+                    search_node(nextNode,point, k, results, get_dist, counter,nodes_Dic,parentDirectory)
+                else: # clustered Node 
+                    clusterFileName = parentDirectory + CurrentNode.left
+                    ClusterNodes = NodeDeserializer.deserialize_from_csv(clusterFileName)
+                    clusterNodeRoot= ClusterNodes[-1]
+                    ClusterNode_Dic= ConvertNodestoDict(ClusterNodes)
+                    search_knn_cluster(clusterNodeRoot, point, k, results, get_dist, counter, ClusterNode_Dic,parentDirectory)        
 
-    If include_all is set to True, empty parts of the tree are filled
-    with dummy entries and the iterator becomes infinite. """
-
-    q = deque()
-    q.append(tree)
-    while q:
-        node = q.popleft()
-        yield node
-
-        if include_all or node.left:
-            q.append(node.left or node.__class__())
-
-        if include_all or node.right:
-            q.append(node.right or node.__class__())
 
 
+# createExternalPart('saved_db_10.csv', size=10, dimensions=70, axis=0, sel_axis=None, lstCount=lstcnt)
+# NodeSerializer.serialize_to_csv(nodes, 'output.csv')
 
-def visualize(tree, max_level=100, node_width=10, left_padding=5):
-    """ Prints the tree to stdout """
+# queryVector = [0.12718718215222624 , 0.963183636660174,0.6555424194210452,0.3133291851458011,0.3528919540205553,0.8668203118164016,0.39626652606370516,0.5728987611344992,0.7074240680371062,0.3864556399520991,0.08491579006631067,0.12291886859445211,0.7707808940776009,0.9327501058342144,0.3066966552889968,0.6419991261669797,0.8588535520215995,0.5824131586724725,0.6131204271127515,0.10286751773999914,0.0549109772028189,0.09352879476593146,0.17104268205957374,0.3824261140256915,0.15356499160275394,0.45347326938263244,0.6083887855272883,0.034960645056148154,0.24393845321453977,0.1278774678517305,0.2871856386640077,0.7512447588345483,0.4859451566973938,0.4199580731997844,0.293269784610794,0.2832464176481909,0.27805718845811844,0.24222588465297312,0.5349363899114752,0.6457376865917788,0.6219711816356497,0.13916395793040215,0.23964331972883335,0.2729502125224802,0.9498684905442188,0.6945602815435133,0.5639426863002537,0.501955681453989,0.3367429117001498,0.9704224868356233,0.007215061636175357,0.030600182627405492,0.09400716702268663,0.25025896502723133,0.14240458339455853,0.009607116915863467,0.2826491522554634,0.7810640954782109,0.9221179015408044,0.21099100150743078,0.18174101107943108,0.8444442653748049,0.2714691854526494,0.26828843222396526,0.4480176844538759,0.036925979004275744,0.05439050847352678,0.0388722829132947,0.08271671126005153,0.44219512781190307]
 
-    height = min(max_level, tree.height()-1)
-    max_width = pow(2, height)
+# print(search_knn("output.csv", queryVector , 1 ,  dist=distance)[0][0].id)
 
-    per_level = 1
-    in_level  = 0
-    level     = 0
+# csvsort('saved_db_10.csv', [1], output_filename='saved_db_10_sorted.csv' , has_header=False)
 
-    for node in level_order(tree, include_all=True):
 
-        if in_level == 0:
-            print()
-            print()
-            print(' '*left_padding, end=' ')
+# deserialized_nodes = NodeDeserializer.deserialize_from_csv('output.csv')
 
-        width = int(max_width*node_width/per_level)
+# Print the deserialized nodes
+# for node in deserialized_nodes:
+#     print("ID " , node.id)
+#     # print("Data " , node.data)
+#     print("Left " , node.left)
+#     print("Right " , node.right)
+#     print("Axis " , node.axis)
+#     print("Dimensions " , node.dimensions)
+#     print("---------------------------------")
 
-        node_str = (str(node.data) if node else '').center(width)
-        print(node_str, end=' ')
-
-        in_level += 1
-
-        if in_level == per_level:
-            in_level   = 0
-            per_level *= 2
-            level     += 1
-
-        if level > height:
-            break
-
-    print()
-    print()

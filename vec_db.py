@@ -1,10 +1,6 @@
-# list[Dictionaries({"id":int, "embed":numpyArray})]
 
-# db.insert_records()
-# --> constructor VecDB
-# db.retrive(query: numpyArray , topk) --> return db_ids[]
-from splitTest import *
-import splitTest
+from kdtree import *
+import kdtree
 import csv
 import numpy as np
 
@@ -47,14 +43,14 @@ class VecDB(object):
                         print("error: vector size is not 70")
                     writer.writerow([vectorID, *value])
         
-        splitTest.lstcnt=0 
-        splitTest.nodes=[]
-        splitTest.Internalnodes=[]
-        splitTest.ClusterCnt=0
+        kdtree.lstcnt=0 
+        kdtree.nodes=[]
+        kdtree.Internalnodes=[]
+        kdtree.ClusterCnt=0
       
       
-        createExternalPart('small_database.csv', size=self.small_db_size, dimensions=70, axis=0, sel_axis=None, lstCount=splitTest.lstcnt)
-        NodeSerializer.serialize_to_csv(splitTest.nodes, 'small_database_output.csv')
+        createExternalPart('small_database.csv', size=self.small_db_size, dimensions=70, axis=0, sel_axis=None, lstCount=kdtree.lstcnt)
+        NodeSerializer.serialize_to_csv(kdtree.nodes, 'small_database_output.csv')
         
         print(lstcnt)
         print("node array size , " , len(nodes))
@@ -73,7 +69,7 @@ class VecDB(object):
             parentDir = self.file_path[:(len(self.file_path)-10)]
 
         Ids=[]
-        resultTuple= search_knn(self.file_path, query.tolist()[0], topk ,  dist=splitTest.distance , parentDirectory=parentDir) # return (node, distance) 
+        resultTuple= search_knn(self.file_path, query.tolist()[0], topk ,  dist=kdtree.distance , parentDirectory=parentDir) # return (node, distance) 
         for i in resultTuple:
             Ids.append(i[0].id)
         return Ids
@@ -87,21 +83,22 @@ class VecDB(object):
 
 
 
-# QUERY_SEED_NUMBER = 100
-# DB_SEED_NUMBER = 200
+# QUERY_SEED_NUMBER = 200
+# DB_SEED_NUMBER = 50
 
 # db = VecDB('test_1m_z/test_1m_d/output.csv' , new_db=False)
 
 # rng = np.random.default_rng(DB_SEED_NUMBER)
-# vectors = rng.random((10**4, 70), dtype=np.float32)
+# vectors = rng.random((10**6, 70), dtype=np.float32)
 
 # rng = np.random.default_rng(QUERY_SEED_NUMBER)
 # query = rng.random((1, 70), dtype=np.float32)
-# # actual_sorted_ids_10k = np.argsort(vectors.dot(query.T).T / (np.linalg.norm(vectors, axis=1) * np.linalg.norm(query)), axis= 1).squeeze().tolist()[::-1]
+# actual_sorted_ids_10k = np.argsort(vectors.dot(query.T).T / (np.linalg.norm(vectors, axis=1) * np.linalg.norm(query)), axis= 1).squeeze().tolist()[::-1]
 
 # # records_dict = [{"id": i, "embed": list(row)} for i, row in enumerate(vectors)]
 # # db.insert_records(records_dict)
-# ids = db.retrive(query, 100)
+# ids = db.retrive(query, 10)
+# print(actual_sorted_ids_10k[:10])
 # print(ids)
 
 

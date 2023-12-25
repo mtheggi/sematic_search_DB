@@ -8,3 +8,4 @@ saved_db_20m_sorted.zip
 saved_db_20m_sorted.csv
 *.ipynb
 test_1m_z/*
+__pycache__/*
