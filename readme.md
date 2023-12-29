@@ -1,4 +1,8 @@
 # 🌲 KD-Tree: Spatial Indexing for Efficient Data Retrieval
+
+![vectorDB](docs/vectorDB.gif)
+
+
 ## 📰 Introduction 
 This project objective is to have Sematic Search Database System that can create indexing on large amount of data, besides it is able to search in the created index for query vectors in a fast
 and accurate method.
