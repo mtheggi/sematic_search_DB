@@ -2,7 +2,7 @@
 
 ![vectorDB](docs/vectorDB.gif)
 
-
+  
 ## 📰 Introduction 
 This project objective is to have Sematic Search Database System that can create indexing on large amount of data, besides it is able to search in the created index for query vectors in a fast
 and accurate method.
@@ -73,6 +73,9 @@ The project focuses on developing an indexing system that efficiently stores and
 
 
 ## 🚀 results
+
+[Evaluation note book Here ](./Team_1_kd_tree_Evaluation_Notebook.ipynb)
+
 <img src="./docs/results.png" alt="result" width="500" >
 
 ## Reference

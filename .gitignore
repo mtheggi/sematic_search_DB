@@ -6,7 +6,6 @@ saved_db_1m_sorted.csv
 saved_db_1m_sorted.zip
 saved_db_20m_sorted.zip
 saved_db_20m_sorted.csv
-*.ipynb
 test_1m_z/*
 __pycache__/*
 submission.zip
